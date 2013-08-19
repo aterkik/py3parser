@@ -32,7 +32,6 @@ class Lexer:
 
         # Rearrange for the second pass
         self.pos = 0
-        print self.content
 
     def join_lines(self):
         implicit_joiners = []
@@ -56,9 +55,7 @@ class Lexer:
                 self.adjust_pos(self.lahead())
                 continue
 
-            # Line-joiner ends.
-            if self.lahead() in ['}', ']', ')']:
-                if self.lahead() == implicit_joiners[-1]:
+            # Line-joiner ends.  if self.lahead() in ['}', ']', ')']: if self.lahead() == implicit_joiners[-1]:
                     implicit_joiners.pop()
                 self.buf += self.lahead()
                 self.adjust_pos(self.lahead())
@@ -171,14 +168,6 @@ class Lexer:
                 self.adjust_pos('\n')
                 linestart = True
                 continue
-
-            """
-            # Line-joining character
-            if self.lahead() == '\\' and self.peek(1) == '\n':
-                self.adjust_pos('\\\n')
-                # TODO: ensure this works as intended
-                continue"""
-
             
             # String literals (Pattern test for long strings must come
             # before the test for small strings).
