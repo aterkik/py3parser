@@ -161,7 +161,6 @@ class Lexer:
                 continue
 
             # Ignore whitespace not at the start of line
-            # TODO: make this all inclusive (e.g. form feeds), use regexp
             if re.match(r'^[ \t\r\f\v]', self.lahead()):
                 self.adjust_pos(self.lahead())
                 continue
@@ -268,8 +267,17 @@ class Lexer:
                 yield Token('LIT', text)
                 continue
 
+            # Imaginary number literals
+            imaginary = r'^(((([0-9]+|([0-9]*\.[0-9]+)|([0-9]+\.))[eE][+-]?[0-9]+)|(([0-9]*\.[0-9]+)|([0-9]+\.)))|([0-9]+))[jJ]'
+            match = re.match(imaginary, self.content[self.pos:])
+            if match:
+                text = match.group()
+                self.adjust_pos(text)
+                yield Token('LIT', text)
+                continue
+
             # Floating point with exponent
-            exponent = '^([0-9]+|([0-9]*\.[0-9]+)|([0-9]+\.))[eE][+-]?[0-9]+'
+            exponent = r'^(([0-9]+|([0-9]*\.[0-9]+)|([0-9]+\.))[eE][+-]?[0-9]+)|(([0-9]*\.[0-9]+)|([0-9]+\.))'
             match = re.match(exponent, self.content[self.pos:])
             if match:
                 text = match.group()
@@ -277,19 +285,7 @@ class Lexer:
                 yield Token('LIT', text)
                 continue
 
-            # Floating point literals
-            pointfloat = '^([0-9]*\.[0-9]+)|([0-9]+\.)'
-            match = re.match(pointfloat, self.content[self.pos:])
-            if match:
-                text = match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-            
-
-            # TODO: handle imaginary literals
-
-
+                        
             # Identifiers and keywords
             if re.match('^[_a-zA-Z][_a-zA-Z0-9]*', self.content[self.pos:]):
                 match = re.match('^[_a-zA-Z][_a-zA-Z0-9]*', self.content[self.pos:])
@@ -302,24 +298,22 @@ class Lexer:
 
                 continue
 
-            # Decimal integer
-            decimal = '^([1-9][0-9]*|0+)'
-            match = re.match(decimal, self.content[self.pos:])
+            # Integer (octal, hex, binary, decimal)
+            integer = r'^(0[oO][0-7]+)|(0[xX][0-9a-fA-F]+)|(0[bB][01]+)|([1-9][0-9]*|0+)'
+            match = re.match(integer, self.content[self.pos:])
             if match:
-                text = match.string[:match.end()]
+                text = match.group()
                 self.adjust_pos(text)
                 yield Token('LIT', text)
                 continue
-
-            # TODO: handle binary, octal, hex
 
             # Punctuation (operators and delimiters are both found
             # in the constant 'OPERATORS'.)
             found_op = False
             for op in OPERATORS:
                 if self.content[self.pos:].startswith(op):
-                    self.adjust_pos(op)
                     yield Token('PUNC', op)
+                    self.adjust_pos(op)
                     found_op = True
                     break
 
@@ -331,8 +325,6 @@ class Lexer:
         if self.lahead() == EOF:
             yield Token('ENDMARKER')
         raise StopIteration
-
-
 
     def lahead(self):
         return self.content[self.pos] if self.pos < len(self.content) else EOF
@@ -357,7 +349,6 @@ class Lexer:
         self.adjust_pos(text)
         return Token('ID', text)
 
-    
 
 if __name__ == '__main__':
     import sys
@@ -366,9 +357,5 @@ if __name__ == '__main__':
         l = Lexer(open(sys.argv[1]).read())
         for t in l.next_token():
             print t
-
-
-
-
 
 
