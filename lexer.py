@@ -1,7 +1,10 @@
-from constants import EOF, KEYWORDS, OPERATORS
+from constants import EOF, KEYWORDS, OPERATORS, whitesp, \
+        keyword_ident, integer, float_, imaginary, \
+        shortb_dblq, shortb_singleq, longb_dblq, longb_singleq, \
+        short_dblq, short_singleq, long_dblq, long_singleq \
+
 import re
 
-re.VERBOSE = True
 
 class Token:
     def __init__(self, ttype, text=None):
@@ -17,13 +20,18 @@ class Token:
         return self.__unicode__()
 
 class Lexer:
-    # A two-pass lexer. First pass transforms logical lines to pyhsical ones,
-    # strips comments. Second pass tokenizes.
+    # A two-pass lexer. First pass transforms logical lines to physical ones
+    # and strips out comments. Second pass tokenizes.
     def __init__(self, fileinput):
         self.content = fileinput
         self.buf = ''
         self.pos = 0
-        self.indentby = None # Holds regexp for spaces or tabs, no mixing in Python 3.
+        # Holds regexp for spaces or tabs, no mixing them in Python 3.
+        self.indentby = None 
+
+        # Identation marker list (used as a stack)
+        # The first indent (i.e. 0) is initialized
+        indents = [0]
 
         # Turns logical lines to physical lines (first pass)
         self.join_lines()
@@ -35,291 +43,49 @@ class Lexer:
 
     def join_lines(self):
         implicit_joiners = []
-        joiner = {'[' : ']', '{' : '}', '(' : ')'}
+        joiners = {'[' : ']', '{' : '}', '(' : ')'}
 
         while self.lahead() != EOF:
             # Ignore comments
             if self.lahead() == '#':
                 self.consume_comment()
-                continue
 
             # Line-joining character
-            if self.lahead() == '\\' and self.peek(1) == '\n':
+            elif self.lahead() == '\\' and self.peek(1) == '\n':
                 self.adjust_pos('\\\n')
-                continue
 
             # Implicit line-joiners ('{', '[', '(')
-            if self.lahead() in ['{', '[', '(']:
-                implicit_joiners.append(joiner[self.lahead()])
+            elif self.lahead() in ['{', '[', '(']:
+                implicit_joiners.append(joiners[self.lahead()])
                 self.buf += self.lahead()
                 self.adjust_pos(self.lahead())
-                continue
-
-            # Line-joiner ends.  if self.lahead() in ['}', ']', ')']: if self.lahead() == implicit_joiners[-1]:
-                    implicit_joiners.pop()
-                self.buf += self.lahead()
-                self.adjust_pos(self.lahead())
-                continue
 
             # If there are unclosed line-joiners, discount the
             # newline character
-            if self.lahead() == '\n' and len(implicit_joiners) > 0:
+            elif self.lahead() == '\n' and len(implicit_joiners) > 0:
                 self.adjust_pos('\n')
-                continue
 
             # Detect the indent character: spaces or tabs.
             # (Mixing spaces and tabs is not allowed in Python 3)
-            newline = re.match(r'^[\n]', self.content[self.pos:])
-            if newline and not self.indentby:
+            elif re.match(r'^[\n]', self.next_input()) and not self.indentby:
                 self.buf += '\n'
                 self.adjust_pos('\n')
 
                 # After the position is adjusted, detect the 
                 # indentation type (i.e. tabs or spaces)
-                if re.match(r'^[ ]+', self.content[self.pos:]):
+                if re.match(r'^[ ]+', self.next_input()):
                     self.indentby = r'^[ \t]+'
-                elif re.match(r'^[\t]+', self.content[self.pos:]):
+                elif re.match(r'^[\t]+', self.next_input()):
                     self.indentby = r'^[\t ]+'
 
                 # We've already adjusted the position so go back
                 continue
-
-            self.buf += self.lahead()
-            self.adjust_pos(self.lahead())
-
-    def next_token(self):
-        # Identation marker list (used as a stack)
-        indents = []
-
-        # Ensure the first line has no indentation (This should be 
-        # a parse error, not a lexical error)
-        #assert(not re.match(r'^[ \t]+', self.content),
-        #       "Error: indentation at first line.");
-
-        # Initialize the first indent
-        indents.append(0)
-
-        # Logical-line start marker (used for indent recognition)
-        linestart = True
-
-        #XXX: Used match.group() instead of match.string[:match.end()] crap
-
-        while self.lahead() != EOF:
-
-            ws_line = re.match(r'^[\s]*[\n]', self.content[self.pos:])
-            if linestart and ws_line:
-               # From the Python 3 spec, 
-               # "A logical line that contains only spaces, tabs, formfeeds
-               # and possibly a comment, is ignored (i.e., no NEWLINE token
-               # is generated)"
-               self.adjust_pos(ws_line.group())
-               linestart = True
-               continue
-
-            
-            # Indent and/or Dedent tokens
-            # self.indentby can legitimately be None (e.g. if the input program
-            # is say a simple one-liner)
-            if linestart and self.indentby:
-                matcher = re.match(self.indentby, self.content[self.pos:])
-                # TODO: raise an Exception if input program is mixing up
-                # tabs and spaces
-
-                if matcher:
-                    indent = matcher.string[:matcher.end()]
-                else:
-                    indent = ''
-                #assert(len(indents) > 0);
-
-                # Check if the current indent length is greater
-                # (i.e. INDENT token)
-                if len(indent) > indents[-1]:
-                    indents.append(len(indent))
-                    yield Token('INDENT')
-                    self.adjust_pos(indent)
-                    
-
-                # Check for DEDENT token
-                elif len(indent) < indents[-1]:
-                    # For each indent at the end of the list not
-                    # not equal to the current indent, remove
-                    # from the list
-                    try:
-                        while indents[-1] != len(indent):
-                            yield Token('DEDENT')
-                            indents.pop()
-                    except IndexError:
-                        print 'Matching indent not found!'
-                        break
-
-                    self.adjust_pos(indent)
-
-                linestart = False
-                continue
-
-            # Ignore whitespace not at the start of line
-            if re.match(r'^[ \t\r\f\v]', self.lahead()):
+            else:
+                self.buf += self.lahead()
                 self.adjust_pos(self.lahead())
-                continue
-
-            # Newline 
-            if self.lahead() == '\n':
-                yield Token('NEWLINE')
-                self.adjust_pos('\n')
-                linestart = True
-                continue
-            
-            # String literals (Pattern test for long strings must come
-            # before the test for small strings).
-            # Single-quoted long string
-            long_singleq = r"^[rR]?'''(\\.|[^'\\]|'(?!''))*'''"
-            long_singleq_match = re.match(long_singleq,
-                                        self.content[self.pos:])
-            if long_singleq_match:
-                text = long_singleq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Double-quoted long string
-            long_dblq = r'^[rR]?"""(\\.|[^"\\]|"(?!""))*"""'
-            long_dblq_match = re.match(long_dblq,
-                                       self.content[self.pos:])
-            if long_dblq_match:
-                text = long_dblq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-
-            # Single quoted short string
-            short_singleq = r"^[rR]?'(\\.|[^'\\])*'"
-            # Double quoted short string
-            short_singleq_match = re.match(short_singleq,
-                                        self.content[self.pos:])
-
-            if short_singleq_match:
-                text = short_singleq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            short_dblq = r'^[rR]?"(\\.|[^"\\])*"'
-            short_dblq_match = re.match(short_dblq,
-                                        self.content[self.pos:])
-            if short_dblq_match:
-                text = short_dblq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Byte literals. Just like strings except
-            # preceded by 'b|B|br|Br|bR|BR' and contain
-            # ASCII only.
-            longb_singleq = r"^(b|B|br|Br|bR|BR)?'''(\\.|[^'\\]|'(?!''))*'''"
-            longb_singleq_match = re.match(longb_singleq,
-                                        self.content[self.pos:])
-            if longb_singleq_match:
-                text = longb_singleq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Double-quoted long byte string
-            longb_dblq = r'^(b|B|br|Br|bR|BR)?"""(\\.|[^"\\]|"(?!""))*"""'
-            longb_dblq_match = re.match(longb_dblq,
-                                       self.content[self.pos:])
-            if longb_dblq_match:
-                text = longb_dblq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-
-            # Single quoted short byte string
-            shortb_singleq = r"^(b|B|br|Br|bR|BR)?'(\\.|[^'\\])*'"
-            # Double quoted short byte string
-            shortb_singleq_match = re.match(shortb_singleq,
-                                        self.content[self.pos:])
-            if shortb_singleq_match:
-                text = shortb_singleq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            shortb_dblq = r'^(b|B|br|Br|bR|BR)?"(\\.|[^"\\])*"'
-            shortb_dblq_match = re.match(shortb_dblq,
-                                        self.content[self.pos:])
-            if shortb_dblq_match:
-                text = shortb_dblq_match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Imaginary number literals
-            imaginary = r'^(((([0-9]+|([0-9]*\.[0-9]+)|([0-9]+\.))[eE][+-]?[0-9]+)|(([0-9]*\.[0-9]+)|([0-9]+\.)))|([0-9]+))[jJ]'
-            match = re.match(imaginary, self.content[self.pos:])
-            if match:
-                text = match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Floating point with exponent
-            exponent = r'^(([0-9]+|([0-9]*\.[0-9]+)|([0-9]+\.))[eE][+-]?[0-9]+)|(([0-9]*\.[0-9]+)|([0-9]+\.))'
-            match = re.match(exponent, self.content[self.pos:])
-            if match:
-                text = match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-                        
-            # Identifiers and keywords
-            if re.match('^[_a-zA-Z][_a-zA-Z0-9]*', self.content[self.pos:]):
-                match = re.match('^[_a-zA-Z][_a-zA-Z0-9]*', self.content[self.pos:])
-                text = match.string[:match.end()]
-
-                if text in KEYWORDS:
-                    yield self.keyword(text)
-                else:
-                    yield self.ident(text)
-
-                continue
-
-            # Integer (octal, hex, binary, decimal)
-            integer = r'^(0[oO][0-7]+)|(0[xX][0-9a-fA-F]+)|(0[bB][01]+)|([1-9][0-9]*|0+)'
-            match = re.match(integer, self.content[self.pos:])
-            if match:
-                text = match.group()
-                self.adjust_pos(text)
-                yield Token('LIT', text)
-                continue
-
-            # Punctuation (operators and delimiters are both found
-            # in the constant 'OPERATORS'.)
-            found_op = False
-            for op in OPERATORS:
-                if self.content[self.pos:].startswith(op):
-                    yield Token('PUNC', op)
-                    self.adjust_pos(op)
-                    found_op = True
-                    break
-
-            if found_op:
-                continue
-
-            raise Exception("Unrecognized token '%s'." % self.lahead())
-
-        if self.lahead() == EOF:
-            yield Token('ENDMARKER')
-        raise StopIteration
 
     def lahead(self):
         return self.content[self.pos] if self.pos < len(self.content) else EOF
-
-    def peek(self, step=1):
-        return self.content[self.pos + step] if self.pos+step < len(self.content) else None 
 
     def consume_comment(self):
         while self.content[self.pos] != '\n':
@@ -327,17 +93,240 @@ class Lexer:
         # Ignore the line-feed character too
         self.pos += 1
 
+    def peek(self, step=1):
+        return self.content[self.pos + step] if self.pos+step < len(self.content) else None 
+
     def adjust_pos(self, text):
         self.pos += len(text)
 
-    def keyword(self, text):
-        self.adjust_pos(text)
-        return Token('KEYWORD', text)
-    
-    def ident(self, text):
-        self.adjust_pos(text)
-        return Token('ID', text)
+    def next_input(self):
+        #TODO: assert(self.pos < len(self.content), 'Illegal position.')
+        return self.content[self.pos:]
 
+    def next_token(self):
+        # Logical-line start flag (used for indent recognition)
+        linestart = True
+
+        while self.lahead() != EOF:
+            ws_line = re.match(r'^[\s]*[\n]', self.next_input())
+            if linestart and ws_line:
+               # From the Python 3 spec:
+               # "A logical line that contains only spaces, tabs, formfeeds
+               # and possibly a comment, is ignored (i.e., no NEWLINE token
+               # is generated)"
+               self.adjust_pos(ws_line.group())
+               linestart = True
+               continue
+
+            # Indent and/or Dedent tokens
+            # self.indentby can legitimately be None (e.g. if the input program
+            # is say a simple one-liner)
+            if linestart and self.indentby:
+                token_dent = self.indentation()
+                if token_dent:
+                    yield token_dnt
+                linestart = False
+                continue
+
+            # Ignore whitespace not found at the start of line
+            if whitesp.match(self.lahead()):
+                self.adjust_pos(self.lahead())
+                continue
+
+            # Logical, non-empty newline 
+            if self.lahead() == '\n':
+                yield Token('NEWLINE')
+                self.adjust_pos('\n')
+                linestart = True
+                continue
+            
+            token_string = self.string_literal()
+            if token_string:
+                yield token_string
+                continue
+
+            token_imaginary = self.imaginary_literal()
+            if token_imaginary:
+                yield token_imaginary
+                continue
+
+            token_float = self.float_literal()
+            if token_float:
+                yield token_float
+                continue
+
+            token_int = self.int_literal()
+            if token_int:
+                yield token_int
+                continue
+
+            token_ident_or_key = self.ident_or_keyword()
+            if token_ident_or_key:
+                yield token_ident_or_key
+                continue
+
+            token_punct = self.punctuation()
+            if token_punct:
+                yield token_punct 
+                continue
+
+            raise Exception("Unrecognized token '%s'." % self.lahead())
+
+        # Out of the main loop!
+        if self.lahead() == EOF:
+            yield Token('ENDMARKER')
+            raise StopIteration
+
+    def indentation(self):
+        matched = re.match(self.indentby, self.next_input())
+                
+        if not matched:
+            return None
+                
+        indent = matched.group()
+
+        # TODO: assert(len(indents))
+
+        # Check if the current indent length is greater
+        # (i.e. INDENT token)
+        if len(indent) > self.indents[-1]:
+                indents.append(len(indent))
+                self.adjust_pos(indent)
+                return Token('INDENT')
+
+        # Check for DEDENT token
+        elif len(indent) < indents[-1]:
+        # For each indent at the end of the list not
+        # not equal to the current indent, remove
+        # from the list
+            try:
+                while self.indents[-1] != len(indent):
+                    self.indents.pop()
+                    self.adjust_pos(indent)
+                    return Token('DEDENT')
+            except IndexError:
+                raise Exception('Matching indent not found!')
+
+        return None
+
+    def string_literal(self):
+        """String literals (Pattern test for long strings must come
+        before the test for small strings).
+        """
+        long_singleq_match = long_singleq.match(self.next_input())
+        # single-quoted long string
+        if long_singleq_match:
+            text = long_singleq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # double-quoted long string
+        long_dblq_match = long_dblq.match(self.next_input())
+        if long_dblq_match:
+            text = long_dblq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # double quoted short string
+        short_singleq_match = short_singleq.match(self.next_input())
+
+        if short_singleq_match:
+            text = short_singleq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # single quoted short string
+        short_dblq_match = short_dblq.match(self.next_input())
+        if short_dblq_match:
+            text = short_dblq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # byte literals. just like strings except
+        # preceded by 'b|B|br|Br|bR|BR' and contain
+        # ascii only.
+        # long single-quoted byte strings
+        longb_singleq_match = longb_singleq.match(self.next_input())
+        if longb_singleq_match:
+            text = longb_singleq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # long double-quoted byte string
+        longb_dblq_match = longb_dblq.match(self.next_input())
+        if longb_dblq_match:
+            text = longb_dblq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # single-quoted short byte string
+        shortb_singleq_match = shortb_singleq.match(self.next_input())
+        if shortb_singleq_match:
+            text = shortb_singleq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        # double quoted short byte string
+        shortb_dblq_match = shortb_dblq.match(self.next_input())
+
+        if shortb_dblq_match:
+            text = shortb_dblq_match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+
+        return None
+
+    def imaginary_literal(self):
+        """Matches and returns a token for 
+        imaginary number literals or None."""
+        match = imaginary.match(self.next_input())
+        if match:
+            text = match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+        return None
+
+    def float_literal(self):
+        """Token for floating point or None if match is not found."""
+        match = float_.match(self.next_input())
+        if match:
+            text = match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+        return None
+
+    def int_literal(self):
+        """Integer (octal, hex, binary, decimal) or None."""
+        match = integer.match(self.next_input())
+        if match:
+            text = match.group()
+            self.adjust_pos(text)
+            return Token('LIT', text)
+        return None
+
+    def ident_or_keyword(self):
+        """Identifiers or keywords or None."""
+        match = keyword_ident.match(self.next_input())
+        if match:
+            text = match.group()
+
+            if text in KEYWORDS:
+                self.adjust_pos(text)
+                return Token('KEYWORD', text)
+            else:
+                self.adjust_pos(text)
+                return Token('ID', text)
+        return None
+    
+    def punctuation(self):
+        """Returns punctuation token or None (if match is not found)."""
+        # Punctuation (operators and delimiters are both found
+        # in the constant 'OPERATORS'.)
+        for op in OPERATORS:
+            if self.next_input().startswith(op):
+                self.adjust_pos(op)
+                return Token('PUNC', op)
+        return None
 
 if __name__ == '__main__':
     import sys
