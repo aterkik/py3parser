@@ -1,8 +1,4 @@
-from constants import EOF, KEYWORDS, OPERATORS, whitesp, \
-        keyword_ident, integer, float_, imaginary, \
-        shortb_dblq, shortb_singleq, longb_dblq, longb_singleq, \
-        short_dblq, short_singleq, long_dblq, long_singleq \
-
+import const
 import re
 
 
@@ -43,9 +39,8 @@ class Lexer:
 
     def join_lines(self):
         implicit_joiners = []
-        joiners = {'[' : ']', '{' : '}', '(' : ')'}
 
-        while self.lahead() != EOF:
+        while self.lahead() != const.eof:
             # Ignore comments
             if self.lahead() == '#':
                 self.consume_comment()
@@ -85,7 +80,7 @@ class Lexer:
                 self.adjust_pos(self.lahead())
 
     def lahead(self):
-        return self.content[self.pos] if self.pos < len(self.content) else EOF
+        return self.content[self.pos] if self.pos < len(self.content) else const.eof 
 
     def consume_comment(self):
         while self.content[self.pos] != '\n':
@@ -107,7 +102,7 @@ class Lexer:
         # Logical-line start flag (used for indent recognition)
         linestart = True
 
-        while self.lahead() != EOF:
+        while self.lahead() != const.eof:
             ws_line = re.match(r'^[\s]*[\n]', self.next_input())
             if linestart and ws_line:
                # From the Python 3 spec:
@@ -129,7 +124,7 @@ class Lexer:
                 continue
 
             # Ignore whitespace not found at the start of line
-            if whitesp.match(self.lahead()):
+            if const.whitesp.match(self.lahead()):
                 self.adjust_pos(self.lahead())
                 continue
 
@@ -173,7 +168,7 @@ class Lexer:
             raise Exception("Unrecognized token '%s'." % self.lahead())
 
         # Out of the main loop!
-        if self.lahead() == EOF:
+        if self.lahead() == const.eof:
             yield Token('ENDMARKER')
             raise StopIteration
 
@@ -213,7 +208,7 @@ class Lexer:
         """String literals (Pattern test for long strings must come
         before the test for small strings).
         """
-        long_singleq_match = long_singleq.match(self.next_input())
+        long_singleq_match = const.long_singleq.match(self.next_input())
         # single-quoted long string
         if long_singleq_match:
             text = long_singleq_match.group()
@@ -221,14 +216,14 @@ class Lexer:
             return Token('LIT', text)
 
         # double-quoted long string
-        long_dblq_match = long_dblq.match(self.next_input())
+        long_dblq_match = const.long_dblq.match(self.next_input())
         if long_dblq_match:
             text = long_dblq_match.group()
             self.adjust_pos(text)
             return Token('LIT', text)
 
         # double quoted short string
-        short_singleq_match = short_singleq.match(self.next_input())
+        short_singleq_match = const.short_singleq.match(self.next_input())
 
         if short_singleq_match:
             text = short_singleq_match.group()
@@ -236,7 +231,7 @@ class Lexer:
             return Token('LIT', text)
 
         # single quoted short string
-        short_dblq_match = short_dblq.match(self.next_input())
+        short_dblq_match = const.short_dblq.match(self.next_input())
         if short_dblq_match:
             text = short_dblq_match.group()
             self.adjust_pos(text)
@@ -246,28 +241,28 @@ class Lexer:
         # preceded by 'b|B|br|Br|bR|BR' and contain
         # ascii only.
         # long single-quoted byte strings
-        longb_singleq_match = longb_singleq.match(self.next_input())
+        longb_singleq_match = const.longb_singleq.match(self.next_input())
         if longb_singleq_match:
             text = longb_singleq_match.group()
             self.adjust_pos(text)
             return Token('LIT', text)
 
         # long double-quoted byte string
-        longb_dblq_match = longb_dblq.match(self.next_input())
+        longb_dblq_match = const.longb_dblq.match(self.next_input())
         if longb_dblq_match:
             text = longb_dblq_match.group()
             self.adjust_pos(text)
             return Token('LIT', text)
 
         # single-quoted short byte string
-        shortb_singleq_match = shortb_singleq.match(self.next_input())
+        shortb_singleq_match = const.shortb_singleq.match(self.next_input())
         if shortb_singleq_match:
             text = shortb_singleq_match.group()
             self.adjust_pos(text)
             return Token('LIT', text)
 
         # double quoted short byte string
-        shortb_dblq_match = shortb_dblq.match(self.next_input())
+        shortb_dblq_match = const.shortb_dblq.match(self.next_input())
 
         if shortb_dblq_match:
             text = shortb_dblq_match.group()
@@ -279,7 +274,7 @@ class Lexer:
     def imaginary_literal(self):
         """Matches and returns a token for 
         imaginary number literals or None."""
-        match = imaginary.match(self.next_input())
+        match = const.imaginary.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -288,7 +283,7 @@ class Lexer:
 
     def float_literal(self):
         """Token for floating point or None if match is not found."""
-        match = float_.match(self.next_input())
+        match = const.float_.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -297,7 +292,7 @@ class Lexer:
 
     def int_literal(self):
         """Integer (octal, hex, binary, decimal) or None."""
-        match = integer.match(self.next_input())
+        match = const.integer.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -306,11 +301,11 @@ class Lexer:
 
     def ident_or_keyword(self):
         """Identifiers or keywords or None."""
-        match = keyword_ident.match(self.next_input())
+        match = const.keyword_ident.match(self.next_input())
         if match:
             text = match.group()
 
-            if text in KEYWORDS:
+            if text in const.keywords:
                 self.adjust_pos(text)
                 return Token('KEYWORD', text)
             else:
@@ -322,7 +317,7 @@ class Lexer:
         """Returns punctuation token or None (if match is not found)."""
         # Punctuation (operators and delimiters are both found
         # in the constant 'OPERATORS'.)
-        for op in OPERATORS:
+        for op in const.operators:
             if self.next_input().startswith(op):
                 self.adjust_pos(op)
                 return Token('PUNC', op)
