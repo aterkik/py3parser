@@ -1,0 +1,72 @@
+""" Unit tests."""
+from lexer import Lexer
+import unittest
+
+TEST_INPUT = open('test.py.txt').read()
+
+class LexerTest(unittest.TestCase):
+    """ Basic tokenization teser. """
+
+    def test_tokens(self):
+        """ Tokens tester. """
+        lexer = Lexer(TEST_INPUT).next_token()
+
+        self.assertEquals(str(lexer.next()), '(KEYWORD def)')
+        self.assertEquals(str(lexer.next()), '(ID "fact")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "(")')
+        self.assertEquals(str(lexer.next()), '(ID "x")')
+        self.assertEquals(str(lexer.next()), '(PUNCT ")")')
+        self.assertEquals(str(lexer.next()), '(PUNCT ":")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(INDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD if)')
+        self.assertEquals(str(lexer.next()), '(ID "x")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "==")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "-")')
+        self.assertEquals(str(lexer.next()), '(LIT 1)')
+        self.assertEquals(str(lexer.next()), '(PUNCT ":")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(INDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD return)')
+        self.assertEquals(str(lexer.next()), '(LIT 1.j)')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(DEDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD elif)')
+        self.assertEquals(str(lexer.next()), '(ID "x")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "==")')
+        self.assertEquals(str(lexer.next()), '(LIT 0)')
+        self.assertEquals(str(lexer.next()), '(PUNCT ":")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(INDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD return)')
+        self.assertEquals(str(lexer.next()), '(LIT 1)')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(DEDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD else)')
+        self.assertEquals(str(lexer.next()), '(PUNCT ":")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(INDENT)')
+        self.assertEquals(str(lexer.next()), '(KEYWORD return)')
+        self.assertEquals(str(lexer.next()), '(ID "x")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "*")')
+        self.assertEquals(str(lexer.next()), '(ID "fact")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "(")')
+        self.assertEquals(str(lexer.next()), '(ID "x")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "-")')
+        self.assertEquals(str(lexer.next()), '(LIT 1)')
+        self.assertEquals(str(lexer.next()), '(PUNCT ")")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(DEDENT)')
+        self.assertEquals(str(lexer.next()), '(DEDENT)')
+        self.assertEquals(str(lexer.next()), '(ID "s")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "=")')
+        self.assertEquals(str(lexer.next()), '(LIT "foo\\ \n\'\"")')
+        self.assertEquals(str(lexer.next()), '(NEWLINE)')
+        self.assertEquals(str(lexer.next()), '(ID "fact")')
+        self.assertEquals(str(lexer.next()), '(PUNCT "(")')
+        self.assertEquals(str(lexer.next()), '(LIT 20)')
+        self.assertEquals(str(lexer.next()), '(PUNCT ")")')
+        self.assertEquals(str(lexer.next()), '(ENDMARKER)')
+
+if __name__ == '__main__':
+    unittest.main()

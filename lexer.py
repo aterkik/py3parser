@@ -1,36 +1,52 @@
+""" Handwritten lexer for Python 3 """
 import const
 import re
 
-
-class Token:
-    def __init__(self, ttype, text=None):
+class Token(object):
+    """ Simple abstraction for a single token. """
+    def __init__(self, ttype, text=None, quote=False, decode=False):
         self.ttype = ttype
-        self.text = text 
+        self.text = text
+        self.quote = quote
+        self.decode = decode
 
     def __unicode__(self):
-        if self.text:
-            return '(%s %s)' % (self.ttype, self.text)
+        text = self.text.decode('string_escape')\
+               if self.decode else self.text
+
+        if text and self.quote:
+            return '(%s "%s")' % (self.ttype, text)
+        elif text:
+            return '(%s %s)' % (self.ttype, text)
         return '(%s)' % self.ttype
 
     def __str__(self):
         return self.__unicode__()
 
-class Lexer:
-    # A two-pass lexer. First pass transforms logical lines to physical ones
-    # and strips out comments. Second pass tokenizes.
+    def print_(self):
+        """ Escaping-aware print. """
+        if self.decode:
+            print self.__unicode__().encode('string_escape')
+        else:
+            print self.__unicode__()
+
+class Lexer(object):
+    """ A two-pass lexer. First pass transforms logical lines to physical ones
+    and strips out comments. Second pass tokenizes. """
     def __init__(self, fileinput):
         self.content = fileinput
         self.buf = ''
         self.pos = 0
         # Holds regexp for spaces or tabs, no mixing them in Python 3.
-        self.indentby = None 
+        self.indentby = None
 
         # Identation marker list (used as a stack)
         # The first indent (i.e. 0) is initialized
-        indents = [0]
+        self.indents = [0]
 
         # Turns logical lines to physical lines (first pass)
         self.join_lines()
+
         # Trim trailing newlines
         self.content = self.buf.strip('\n')
 
@@ -38,9 +54,10 @@ class Lexer:
         self.pos = 0
 
     def join_lines(self):
+        """ Converts physical lines to logical lines. """
         implicit_joiners = []
 
-        while self.lahead() != const.eof:
+        while self.lahead() != const.EOF:
             # Ignore comments
             if self.lahead() == '#':
                 self.consume_comment()
@@ -51,7 +68,14 @@ class Lexer:
 
             # Implicit line-joiners ('{', '[', '(')
             elif self.lahead() in ['{', '[', '(']:
-                implicit_joiners.append(joiners[self.lahead()])
+                implicit_joiners.append(const.JOINERS[self.lahead()])
+                self.buf += self.lahead()
+                self.adjust_pos(self.lahead())
+
+            elif self.lahead() in ['}', ']', ')']:
+                if len(implicit_joiners) > 0 and \
+                implicit_joiners[-1] == self.lahead():
+                   implicit_joiners.pop()
                 self.buf += self.lahead()
                 self.adjust_pos(self.lahead())
 
@@ -66,7 +90,7 @@ class Lexer:
                 self.buf += '\n'
                 self.adjust_pos('\n')
 
-                # After the position is adjusted, detect the 
+                # After the position is adjusted, detect the
                 # indentation type (i.e. tabs or spaces)
                 if re.match(r'^[ ]+', self.next_input()):
                     self.indentby = r'^[ \t]+'
@@ -80,61 +104,72 @@ class Lexer:
                 self.adjust_pos(self.lahead())
 
     def lahead(self):
-        return self.content[self.pos] if self.pos < len(self.content) else const.eof 
+        """ Lookahead. """
+        return self.content[self.pos] \
+               if self.pos < len(self.content) else const.EOF
 
     def consume_comment(self):
+        """ Ignores comments. """
         while self.content[self.pos] != '\n':
             self.pos += 1
         # Ignore the line-feed character too
         self.pos += 1
 
     def peek(self, step=1):
-        return self.content[self.pos + step] if self.pos+step < len(self.content) else None 
+        """ Peek ahead 'step' characters. """
+        assert(step > 0)
+        return self.content[self.pos + step] \
+               if self.pos+step < len(self.content) else None
 
     def adjust_pos(self, text):
+        """ Move the position len(text) forward. """
         self.pos += len(text)
 
     def next_input(self):
-        #TODO: assert(self.pos < len(self.content), 'Illegal position.')
+        """ Remaining string input. """
         return self.content[self.pos:]
 
     def next_token(self):
+        """ Yields the next valid token. """
         # Logical-line start flag (used for indent recognition)
         linestart = True
 
-        while self.lahead() != const.eof:
-            ws_line = re.match(r'^[\s]*[\n]', self.next_input())
-            if linestart and ws_line:
-               # From the Python 3 spec:
-               # "A logical line that contains only spaces, tabs, formfeeds
-               # and possibly a comment, is ignored (i.e., no NEWLINE token
-               # is generated)"
-               self.adjust_pos(ws_line.group())
-               linestart = True
-               continue
+        #import pdb; pdb.set_trace()
+
+        while self.lahead() != const.EOF:
+            ws_match = const.WS_LINE.match(self.next_input())
+            if linestart and ws_match:
+                # From the Python 3 spec:
+                # "A logical line that contains only spaces, tabs, formfeeds
+                # and possibly a comment, is ignored (i.e., no NEWLINE token
+                # is generated)"
+                self.adjust_pos(ws_match.group())
+                # Leave the linestart switch at True
+                linestart = True
+                continue
 
             # Indent and/or Dedent tokens
             # self.indentby can legitimately be None (e.g. if the input program
             # is say a simple one-liner)
             if linestart and self.indentby:
-                token_dent = self.indentation()
-                if token_dent:
-                    yield token_dnt
+                tokens = self.indentation()
+                for token in tokens:
+                    yield token
                 linestart = False
                 continue
 
             # Ignore whitespace not found at the start of line
-            if const.whitesp.match(self.lahead()):
+            if const.WHITESP.match(self.lahead()):
                 self.adjust_pos(self.lahead())
                 continue
 
-            # Logical, non-empty newline 
+            # Logical, non-empty newline
             if self.lahead() == '\n':
                 yield Token('NEWLINE')
                 self.adjust_pos('\n')
                 linestart = True
                 continue
-            
+
             token_string = self.string_literal()
             if token_string:
                 yield token_string
@@ -162,119 +197,118 @@ class Lexer:
 
             token_punct = self.punctuation()
             if token_punct:
-                yield token_punct 
+                yield token_punct
                 continue
 
             raise Exception("Unrecognized token '%s'." % self.lahead())
 
         # Out of the main loop!
-        if self.lahead() == const.eof:
+        if self.lahead() == const.EOF:
             yield Token('ENDMARKER')
             raise StopIteration
 
     def indentation(self):
-        matched = re.match(self.indentby, self.next_input())
-                
-        if not matched:
-            return None
-                
-        indent = matched.group()
+        """ Returns a single 'indent' token in a list
+            or a list of multiple 'dedent' tokens. """
 
-        # TODO: assert(len(indents))
+        return_tokens = []
+        matched = re.match(self.indentby, self.next_input())
+        indent = matched.group() if matched else ''
 
         # Check if the current indent length is greater
         # (i.e. INDENT token)
         if len(indent) > self.indents[-1]:
-                indents.append(len(indent))
-                self.adjust_pos(indent)
-                return Token('INDENT')
+            self.indents.append(len(indent))
+            self.adjust_pos(indent)
+            return_tokens.append(Token('INDENT'))
 
         # Check for DEDENT token
-        elif len(indent) < indents[-1]:
+        elif len(indent) < self.indents[-1]:
         # For each indent at the end of the list not
         # not equal to the current indent, remove
         # from the list
             try:
                 while self.indents[-1] != len(indent):
                     self.indents.pop()
-                    self.adjust_pos(indent)
-                    return Token('DEDENT')
+                    return_tokens.append(Token('DEDENT'))
+
+                self.adjust_pos(indent)
             except IndexError:
                 raise Exception('Matching indent not found!')
 
-        return None
+        return return_tokens
 
     def string_literal(self):
-        """String literals (Pattern test for long strings must come
-        before the test for small strings).
-        """
-        long_singleq_match = const.long_singleq.match(self.next_input())
-        # single-quoted long string
+        """ String literals (Pattern test for long strings must come
+        before the test for small strings). """
+
+        # Single-quoted long string (i.e. '''spam''')
+        long_singleq_match = const.LONG_SINGLEQ.match(self.next_input())
         if long_singleq_match:
             text = long_singleq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # double-quoted long string
-        long_dblq_match = const.long_dblq.match(self.next_input())
+        # Double-quoted long string (i.e. """spam""")
+        long_dblq_match = const.LONG_DBLQ.match(self.next_input())
         if long_dblq_match:
             text = long_dblq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # double quoted short string
-        short_singleq_match = const.short_singleq.match(self.next_input())
-
+        # Single-quoted short string (i.e. 'spam')
+        short_singleq_match = const.SHORT_SINGLEQ.match(self.next_input())
         if short_singleq_match:
             text = short_singleq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # single quoted short string
-        short_dblq_match = const.short_dblq.match(self.next_input())
+        # Double-quoted short string (i.e. "spam")
+        short_dblq_match = const.SHORT_DBLQ.match(self.next_input())
         if short_dblq_match:
+            #import pdb; pdb.set_trace()
             text = short_dblq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # byte literals. just like strings except
+        # Byte literals. just like strings except
         # preceded by 'b|B|br|Br|bR|BR' and contain
         # ascii only.
         # long single-quoted byte strings
-        longb_singleq_match = const.longb_singleq.match(self.next_input())
+        longb_singleq_match = const.LONGB_SINGLEQ.match(self.next_input())
         if longb_singleq_match:
             text = longb_singleq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # long double-quoted byte string
-        longb_dblq_match = const.longb_dblq.match(self.next_input())
+        # Long double-quoted byte string
+        longb_dblq_match = const.LONGB_DBLQ.match(self.next_input())
         if longb_dblq_match:
             text = longb_dblq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # single-quoted short byte string
-        shortb_singleq_match = const.shortb_singleq.match(self.next_input())
+        # Single-quoted short byte string
+        shortb_singleq_match = const.SHORTB_SINGLEQ.match(self.next_input())
         if shortb_singleq_match:
             text = shortb_singleq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
-        # double quoted short byte string
-        shortb_dblq_match = const.shortb_dblq.match(self.next_input())
+        # Double quoted short byte string
+        shortb_dblq_match = const.SHORTB_DBLQ.match(self.next_input())
 
         if shortb_dblq_match:
             text = shortb_dblq_match.group()
             self.adjust_pos(text)
-            return Token('LIT', text)
+            return Token('LIT', text, decode=True)
 
         return None
 
     def imaginary_literal(self):
-        """Matches and returns a token for 
-        imaginary number literals or None."""
-        match = const.imaginary.match(self.next_input())
+        """ Matches and returns a token for
+        imaginary number literals or None. """
+        match = const.IMAGINARY.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -282,8 +316,8 @@ class Lexer:
         return None
 
     def float_literal(self):
-        """Token for floating point or None if match is not found."""
-        match = const.float_.match(self.next_input())
+        """Token for floating point or None if match is not found. """
+        match = const.FLOAT_.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -291,8 +325,8 @@ class Lexer:
         return None
 
     def int_literal(self):
-        """Integer (octal, hex, binary, decimal) or None."""
-        match = const.integer.match(self.next_input())
+        """ Integer (octal, hex, binary, decimal) or None. """
+        match = const.INTEGER.match(self.next_input())
         if match:
             text = match.group()
             self.adjust_pos(text)
@@ -300,35 +334,35 @@ class Lexer:
         return None
 
     def ident_or_keyword(self):
-        """Identifiers or keywords or None."""
-        match = const.keyword_ident.match(self.next_input())
+        """ Identifiers or keywords or None. """
+        match = const.KEYWORD_IDENT.match(self.next_input())
         if match:
             text = match.group()
 
-            if text in const.keywords:
+            if text in const.KEYWORDS:
                 self.adjust_pos(text)
                 return Token('KEYWORD', text)
             else:
                 self.adjust_pos(text)
-                return Token('ID', text)
+                return Token('ID', text, quote=True)
         return None
-    
+
     def punctuation(self):
-        """Returns punctuation token or None (if match is not found)."""
+        """ Returns punctuation token or None (if match is not found). """
         # Punctuation (operators and delimiters are both found
-        # in the constant 'OPERATORS'.)
-        for op in const.operators:
-            if self.next_input().startswith(op):
-                self.adjust_pos(op)
-                return Token('PUNC', op)
+        # in the constant 'const.operators'.)
+        for operator in const.OPERATORS:
+            if self.next_input().startswith(operator):
+                self.adjust_pos(operator)
+                return Token('PUNCT', operator, quote=True)
         return None
 
 if __name__ == '__main__':
     import sys
 
-    if len(sys.argv) > 1:
-        l = Lexer(open(sys.argv[1]).read())
-        for t in l.next_token():
-            print t
+    def main():
+        py3lexer = Lexer(open(sys.argv[1]).read())
+        for token in py3lexer.next_token():
+            token.print_()
 
-
+    main()
