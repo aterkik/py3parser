@@ -4,21 +4,24 @@ import re
 
 class Token(object):
     """ Simple abstraction for a single token. """
-    def __init__(self, ttype, text=None, quote=False, decode=False):
-        self.ttype = ttype
-        self.text = text
+    def __init__(self, type, text=None, quote=False, decode=False):
+        self.type = type
+        #self.text = text
+        self.value = text
         self.quote = quote
         self.decode = decode
 
-    def __unicode__(self):
-        text = self.text.decode('string_escape')\
-               if self.decode else self.text
 
-        if text and self.quote:
-            return '(%s "%s")' % (self.ttype, text)
-        elif text:
-            return '(%s %s)' % (self.ttype, text)
-        return '(%s)' % self.ttype
+
+    def __unicode__(self):
+        value = self.value.decode('string_escape')\
+               if self.decode else self.value
+
+        if value and self.quote:
+            return '(%s "%s")' % (self.type, value)
+        elif value:
+            return '(%s %s)' % (self.type, value)
+        return '(%s)' % self.type
 
     def __str__(self):
         return self.__unicode__()
@@ -128,6 +131,12 @@ class Lexer(object):
     def next_input(self):
         """ Remaining string input. """
         return self.content[self.pos:]
+
+    def token(self):
+        """Method used to interface with PLY."""
+        for token in self.next_token():
+            return token
+        return None
 
     def next_token(self):
         """ Yields the next valid token. """
@@ -361,6 +370,10 @@ if __name__ == '__main__':
     import sys
 
     def main():
+        if len(sys.argv) < 2:
+            print 'Error: please specify a filename as the first argument.'
+            exit(1)
+
         py3lexer = Lexer(open(sys.argv[1]).read())
         for token in py3lexer.next_token():
             token.print_()
