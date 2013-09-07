@@ -1,3 +1,5 @@
+parsetab.py
+parser.out
 *.py[cod]
 
 # C extensions

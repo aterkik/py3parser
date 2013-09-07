@@ -11,8 +11,6 @@ class Token(object):
         self.quote = quote
         self.decode = decode
 
-
-
     def __unicode__(self):
         value = self.value.decode('string_escape')\
                if self.decode else self.value
@@ -36,8 +34,8 @@ class Token(object):
 class Lexer(object):
     """ A two-pass lexer. First pass transforms logical lines to physical ones
     and strips out comments. Second pass tokenizes. """
-    def __init__(self, fileinput):
-        self.content = fileinput
+    def __init__(self):
+        self.content = ''
         self.buf = ''
         self.pos = 0
         # Holds regexp for spaces or tabs, no mixing them in Python 3.
@@ -46,15 +44,19 @@ class Lexer(object):
         # Identation marker list (used as a stack)
         # The first indent (i.e. 0) is initialized
         self.indents = [0]
-
-        # Turns logical lines to physical lines (first pass)
+        self.tokens = None
+        
+    def input(self, content):
+        """Accepts parser input"""
+        self.content = content
+        # Turns logical lines to physical lines (first pass), writes
+        # to buffer (self.buf)
         self.join_lines()
-
         # Trim trailing newlines
         self.content = self.buf.strip('\n')
-
         # Rearrange for the second pass
         self.pos = 0
+        self.tokens = self.next_token()
 
     def join_lines(self):
         """ Converts physical lines to logical lines. """
@@ -133,17 +135,16 @@ class Lexer(object):
         return self.content[self.pos:]
 
     def token(self):
-        """Method used to interface with PLY."""
-        for token in self.next_token():
-            return token
+        for tok in self.tokens:
+            return tok
+
+        # Token generator ends
         return None
 
     def next_token(self):
         """ Yields the next valid token. """
         # Logical-line start flag (used for indent recognition)
         linestart = True
-
-        #import pdb; pdb.set_trace()
 
         while self.lahead() != const.EOF:
             ws_match = const.WS_LINE.match(self.next_input())
@@ -374,8 +375,15 @@ if __name__ == '__main__':
             print 'Error: please specify a filename as the first argument.'
             exit(1)
 
-        py3lexer = Lexer(open(sys.argv[1]).read())
-        for token in py3lexer.next_token():
-            token.print_()
+        py3lexer = Lexer()
+        py3lexer.input(open(sys.argv[1]).read())
+
+        while True:
+            token = py3lexer.token()
+            if token:
+                token.print_()
+            else:
+                break
+
 
     main()
