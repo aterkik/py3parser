@@ -245,15 +245,14 @@ def p_yield_testlist_star(p):
 """EBNF production:
    testlist_star_expr : (test|star_expr) (',' (test|star_expr))* [',']"""
 def p_testlist_star_expr(p):
-    """testlist_star_expr : test testlist_right
-                          | star_expr testlist_right
+    """testlist_star_expr : test test_star_exprs COMMA
+                          | test COMMA
+                          | star_expr test_star_exprs COMMA
+                          | star_expr COMMA
+                          | test test_star_exprs 
+                          | star_expr test_star_exprs 
                           | test
                           | star_expr"""
-    pass
-
-def p_testlist_right(p):
-    """testlist_right : test_star_exprs COMMA
-                      | COMMA"""
     pass
 
 def p_test_star_exprs(p):
@@ -974,16 +973,13 @@ def p_comma_arguments(p):
     pass
 
 def p_argslist(p):
-    """arglist : arguments argument COMMA
-               | arguments argument
+    """arglist : arguments 
                | arguments TIMES test comma_arguments COMMA EXP test
                | arguments TIMES test COMMA EXP test
                | arguments TIMES test comma_arguments
                | arguments TIMES test
                | arguments EXP test
 
-               | argument COMMA
-               | argument
                | TIMES test comma_arguments COMMA EXP test
                | TIMES test COMMA EXP test
                | TIMES test comma_arguments
@@ -993,6 +989,7 @@ def p_argslist(p):
 
 def p_arguments(p):
     """arguments : argument COMMA
+                 | argument
                  | argument COMMA arguments"""
     pass
 
