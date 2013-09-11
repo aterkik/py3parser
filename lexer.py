@@ -351,7 +351,7 @@ class Lexer(object):
 
             if text in const.KEYWORDS:
                 self.adjust_pos(text)
-                return Token('KEYWORD', text)
+                return Token(text.upper(), text)
             else:
                 self.adjust_pos(text)
                 return Token('ID', text, quote=True)
@@ -361,10 +361,10 @@ class Lexer(object):
         """ Returns punctuation token or None (if match is not found). """
         # Punctuation (operators and delimiters are both found
         # in the constant 'const.operators'.)
-        for operator in const.OPERATORS:
+        for operator in const.OPERATORS.keys():
             if self.next_input().startswith(operator):
                 self.adjust_pos(operator)
-                return Token('PUNCT', operator, quote=True)
+                return Token(const.OPERATORS[operator], operator, quote=True)
         return None
 
 if __name__ == '__main__':
