@@ -221,7 +221,13 @@ class Lexer(object):
 
         # Out of the main loop!
         if self.lahead() == const.EOF:
+
             yield Token('NEWLINE')
+            # Return and remaining DEDENT tokens
+            while len(self.indents) > 1:
+                yield Token('DEDENT')
+                self.indents.pop()
+
             yield Token('ENDMARKER')
             raise StopIteration
 
@@ -380,7 +386,7 @@ if __name__ == '__main__':
 
     def main():
         if len(sys.argv) < 2:
-            print 'Error: please specify a filename as the first argument.'
+            print 'error: please specify a filename as the first argument.'
             exit(1)
 
         py3lexer = Lexer()

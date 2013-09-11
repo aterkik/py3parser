@@ -1002,7 +1002,7 @@ argument : test [comp_for] | test '=' test"""
 def p_argument(p):
     """argument : test comp_for
                 | test
-                | test EQ test"""
+                | test ASSIGN test"""
     pass
 
 
@@ -1048,7 +1048,7 @@ def p_yield_arg(p):
 lexer = Lexer()
 parser = yacc.yacc()
 
-if __name__ == '__main__'
+if __name__ == '__main__':
     import sys
 
     def main():
