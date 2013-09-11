@@ -17,16 +17,22 @@ tokens = [
 tokens += map(lambda x: x.upper(), KEYWORDS)
 tokens += OPERATORS.values()
 
+
+def p_error(p):
+    print "Syntax error at token", p.type
+    import pdb; pdb.set_trace()
+    pass
+
 """EBNF production:
    file_input : (NEWLINE | stmt)* ENDMARKER"""
 def p_file_input(p):
-    """file_input : newlines_or_stmts ENDMARKER"""
+    """file_input : newlines_or_stmts ENDMARKER
+                  | ENDMARKER"""
     pass
 
 def p_newlines_or_stmts(p):
-    """newlines_or_stmts : empty
-                | newlines 
-                | stmts"""
+    """newlines_or_stmts : newlines 
+                         | stmts"""
     pass
 
 def p_empty(p):
@@ -215,7 +221,8 @@ def p_small_stmt(p):
 expr_stmt : testlist_star_expr (augassign (yield_expr|testlist) |
                         ('=' (yield_expr|testlist_star_expr))*)"""
 def p_expr_stmt(p):
-    """expr_stmt : testlist_star_expr rexpr_stmt_1"""
+    """expr_stmt : testlist_star_expr rexpr_stmt_1
+                 | testlist_star_expr"""
     pass
 
 def p_rexpr_stmt_1(p):
@@ -239,13 +246,14 @@ def p_yield_testlist_star(p):
    testlist_star_expr : (test|star_expr) (',' (test|star_expr))* [',']"""
 def p_testlist_star_expr(p):
     """testlist_star_expr : test testlist_right
-                          | star_expr testlist_right"""
+                          | star_expr testlist_right
+                          | test
+                          | star_expr"""
     pass
 
 def p_testlist_right(p):
     """testlist_right : test_star_exprs COMMA
-                      | COMMA
-                      | empty"""
+                      | COMMA"""
     pass
 
 def p_test_star_exprs(p):
@@ -1040,17 +1048,19 @@ def p_yield_arg(p):
 lexer = Lexer()
 parser = yacc.yacc()
 
-if __name__ == '__main__':
-    
-    def main():
-        import sys
+if __name__ == '__main__'
+    import sys
 
-        s = sys.stdin.read()
+    def main():
+        if len(sys.argv) < 2:
+            print "Usage: parser.py <filename>"
+            exit(1)
+            
+        s = open(sys.argv[1]).read()
         if not s:
             return
-        result = parser.parse(s, lexer=lexer)
+        result = parser.parse(s, lexer=lexer, debug=1)
 
-        print
         print result
 
     main()

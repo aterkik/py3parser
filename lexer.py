@@ -143,7 +143,7 @@ class Lexer(object):
 
     def next_token(self):
         """ Yields the next valid token. """
-        # Logical-line start flag (used for indent recognition)
+        # Logical-line start flag (used for indentation recognition)
         linestart = True
 
         while self.lahead() != const.EOF:
@@ -169,6 +169,7 @@ class Lexer(object):
                 continue
 
             # Ignore whitespace not found at the start of line
+            # (exclduing '\n').
             if const.WHITESP.match(self.lahead()):
                 self.adjust_pos(self.lahead())
                 continue
@@ -183,37 +184,44 @@ class Lexer(object):
             token_string = self.string_literal()
             if token_string:
                 yield token_string
+                linestart = False
                 continue
 
             token_imaginary = self.imaginary_literal()
             if token_imaginary:
                 yield token_imaginary
+                linestart = False
                 continue
 
             token_float = self.float_literal()
             if token_float:
                 yield token_float
+                linestart = False
                 continue
 
             token_int = self.int_literal()
             if token_int:
                 yield token_int
+                linestart = False
                 continue
 
             token_ident_or_key = self.ident_or_keyword()
             if token_ident_or_key:
                 yield token_ident_or_key
+                linestart = False
                 continue
 
             token_punct = self.punctuation()
             if token_punct:
                 yield token_punct
+                linestart = False
                 continue
 
             raise Exception("Unrecognized token '%s'." % self.lahead())
 
         # Out of the main loop!
         if self.lahead() == const.EOF:
+            yield Token('NEWLINE')
             yield Token('ENDMARKER')
             raise StopIteration
 
