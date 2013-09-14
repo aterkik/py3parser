@@ -1,8 +1,10 @@
 """Parser for a large subset of Python 3"""
+
 from lexer import Lexer
 from ply import yacc
 
 from const import OPERATORS, KEYWORDS
+from py3ast import *
 
 TEST_INPUT = open('test.py.txt').read()
 
@@ -18,22 +20,33 @@ tokens += map(lambda x: x.upper(), KEYWORDS)
 tokens += OPERATORS.values()
 
 
+def _is_stmt(node):
+    return len(filter(
+                    lambda p: isinstance(node, p),
+                   (FunctionDef, ClassDef, Return, Delete,
+                    Assign, AugAssign, For, While, If,
+                    With, Raise, Try, Assert, Import,
+                    ImportFrom, Global, Nonlocal, Expr,
+                    Pass, Break, Continue)))
+
+
 def p_error(p):
     print "Syntax error at token", p.type
     import pdb; pdb.set_trace()
-    pass
 
 """EBNF production:
    file_input : (NEWLINE | stmt)* ENDMARKER"""
 def p_file_input(p):
     """file_input : newlines_or_stmts ENDMARKER
                   | ENDMARKER"""
-    pass
+    body = p[1] if len(p) > 2 else []
+    p[0] = Module(body)
 
 def p_newlines_or_stmts(p):
     """newlines_or_stmts : newlines 
                          | stmts"""
-    pass
+    if p[1] and len(p[1]) and _is_stmt(p[1][0]):
+        p[0] = p[1]
 
 def p_empty(p):
     """empty : """
@@ -47,9 +60,13 @@ def p_newlines(p):
 def p_stmts(p):
     """stmts : stmt
              | stmts stmt"""
-    pass
-
-
+    if len(p) == 2:
+        if isinstance(p[0], list):
+            p[0].append(p[1])
+        else:
+            p[0] = [p[1]]
+    else:
+        p[0] = p[1] + [p[2]]
 
 """EBNF production:
    decorator : '@' dotted_name [ '(' [arglist] ')' ] NEWLINE"""
@@ -57,25 +74,31 @@ def p_decorator(p):
     """decorator : AT dotted_name LPAR arglist RPAR NEWLINE
                  | AT dotted_name LPAR RPAR NEWLINE
                  | AT dotted_name NEWLINE"""
-    pass
+    arglist = p[4] if len(p) == 7 else []
+    p[0] = ('decorator', p[1], arglist)
 
 """EBNF production:
    decorators : decorator+"""
 def p_decorators(p):
     """decorators : decorator decorators_1"""
-    pass
+    p[0] = [p[1]] + p[2]
 
 def p_decorators_1(p):
     """decorators_1 : decorator decorators_1
                     | empty"""
-    pass
+    if len(p) == 3:
+        p[0] = [p[1]] + p[2]
+    else:
+        p[0] = []
 
 """EBNF production:
    decorated: decorators (classdef | funcdef)"""
 def p_decorated(p):
     """decorated : decorators classdef
                  | decorators funcdef"""
-    pass
+
+    p[2].decorator_list = p[1]
+
 
 
 """EBNF production:
@@ -83,8 +106,13 @@ def p_decorated(p):
 def p_funcdef(p):
     """funcdef : DEF ID parameters RETSYM test COLON suite
                | DEF ID parameters COLON suite"""
-    pass
 
+    if len(p) == 8:
+        p[0] = FunctionDef(p[2], p[3], p[7], None, p[5])
+    else:
+        p[0] = FunctionDef(p[2], p[3], p[5], None, None)
+
+    import pdb; pdb.set_trace()
 
 # For parameters list, the productions used are
 # found at docs.python.org/3.3/reference/compound_stmts.html#function
@@ -92,44 +120,107 @@ def p_funcdef(p):
 def p_parameters(p):
     """parameters : LPAR parameter_list RPAR
                   | LPAR RPAR"""
-    pass
+    p[0] = p[2] if len(p) == 4 else []
 
 def p_parameter_list(p):
     """parameter_list : defparameters_1 keyparams
                       | keyparams"""
-    pass
+    if len(p) == 3:
+        p[2].args += p[1]
+        p[0] = p[2]
+    else:
+        p[0] = p[1]
+
 
 def p_defparameters_1(p):
-    """defparameters_1 : defparameters_2 COMMA
+    """defparameters_1 : empty 
                        | defparameter COMMA defparameters_1"""
-    pass
+    if len(p) == 4:
+        p[3] = p[3] if isinstance(p[3], list) else []
+        p[0] = p[3] + [p[1]]
+
 
 def p_keyparams(p):
     """keyparams : TIMES typedparameter defparameters_2 COMMA EXP typedparameter
                  | TIMES typedparameter COMMA EXP typedparameter
                  | TIMES typedparameter defparameters_2
                  | TIMES defparameters_2 COMMA EXP typedparameter
-                 | TIMES COMMA EXP typedparameter
                  | TIMES defparameters_2
                  | TIMES typedparameter
                  | defparameter COMMA
                  | defparameter"""
-    pass
+
+    if len(p) == 7:
+        args = p[-1] or []
+        vararg = p[2]
+        varargannotation = None
+        kwonlyargs = p[3]
+        kwarg = p[6]
+
+    elif len(p) == 6 and not isinstance(p[2], list):
+        args = p[-1] or []
+        vararg = p[2]
+        varargannotation = None
+        kwonlyargs = []
+        kwarg = p[5]
+
+    elif len(p) == 4:
+        args = p[-1] or []
+        vararg = p[2]
+        varargannotation = None
+        kwonlyargs = p[3]
+        kwarg = None
+
+    elif len(p) == 6 and isinstance(p[2], list):
+        args = p[-1] or []
+        vararg = p[2][0] if len(p[2]) else None
+        varargannotation = None
+        kwonlyargs = []
+        kwarg = p[5]
+
+    elif len(p) == 3 and p[1] == '*':
+        args = p[-1] or []
+        vararg = p[2][0] if isinstance(p[2], list) else p[2]
+        varargannotation = None
+        kwonlyargs = []
+        kwarg = None
+
+    else:
+        args = p[-1] or []
+        if isinstance(args, list):
+            args.append(p[1])
+        vararg = None
+        varargannotation = None
+        kwonlyargs = []
+        kwarg = None
+
+    p[0] = Arguments(args,
+                     vararg,
+                     varargannotation,
+                     kwonlyargs,
+                     kwarg,
+                     None,
+                     [],
+                     [])
 
 def p_defparameters_2(p):
     """defparameters_2 : COMMA defparameter
                        | COMMA defparameter defparameters_2"""
-    pass
+    if len(p) == 3:
+        p[0] = [p[2]]
+    else:
+        p[0] = [p[2]] + p[3]
 
 def p_defparameter(p):
     """defparameter : typedparameter
                     | typedparameter ASSIGN test"""
-    pass
+    p[0] = p[1]
 
 def p_typedparameter(p):
     """typedparameter : ID
                       | ID COLON test"""
-    pass
+    Load()
+    p[0] = Name(p[1], ctx=Load())
 
 
 
@@ -180,6 +271,7 @@ stmt : simple_stmt | compound_stmt"""
 def p_stmt(p):
     """stmt : simple_stmt
             | compound_stmt"""
+    p[0] = Node('Stmt', p[1])
     pass
 
 """EBNF production:
@@ -189,11 +281,13 @@ def p_simple_stmt(p):
                    | small_stmt SEMICOLON NEWLINE
                    | small_stmt small_stmts NEWLINE
                    | small_stmt NEWLINE"""
+    p[0] = p[1]
     pass
 
 def p_small_stmts(p):
     """small_stmts : SEMICOLON small_stmt
                    | SEMICOLON small_stmt small_stmts"""
+    p[0] = p[2]
     pass
 
 
@@ -215,6 +309,7 @@ def p_small_stmt(p):
                   | global_stmt
                   | nonlocal_stmt
                   | assert_stmt"""
+    p[0] = p[1]
     pass
 
 """EBNF production:
@@ -223,6 +318,7 @@ expr_stmt : testlist_star_expr (augassign (yield_expr|testlist) |
 def p_expr_stmt(p):
     """expr_stmt : testlist_star_expr rexpr_stmt_1
                  | testlist_star_expr"""
+    p[0] = Node('Expr', p[1])
     pass
 
 def p_rexpr_stmt_1(p):
@@ -253,6 +349,7 @@ def p_testlist_star_expr(p):
                           | star_expr test_star_exprs 
                           | test
                           | star_expr"""
+    p[0] = p[1]
     pass
 
 def p_test_star_exprs(p):
@@ -307,6 +404,7 @@ def p_flow_stmt(p):
                  | return_stmt
                  | raise_stmt
                  | yield_stmt"""
+    p[0] = p[1]
     pass
 
 
@@ -329,6 +427,10 @@ return_stmt : 'return' [testlist]"""
 def p_return_stmt(p):
     """return_stmt : RETURN
                    | RETURN testlist"""
+    if len(p) == 2:
+        p[0] = Node('Return')
+    else:
+        p[0] = Node('Return', [], p[2])
     pass
 
 """EBNF production:
@@ -487,6 +589,7 @@ def p_compound_stmt(p):
                      | funcdef
                      | classdef
                      | decorated"""
+    p[0] = p[1]
     pass
 
 """EBNF production:
@@ -573,6 +676,10 @@ suite : simple_stmt | NEWLINE INDENT stmt+ DEDENT"""
 def p_suite(p):
     """suite : simple_stmt
              | NEWLINE INDENT stmts DEDENT"""
+    if len(p) == 1:
+        p[0] = p[1]
+    else:
+        p[0] = p[3]
     pass
 
 """EBNF production:
@@ -581,6 +688,7 @@ def p_test(p):
     """test : or_test IF or_test ELSE test
             | or_test
             | lambdef"""
+    p[0] = p[1]
     pass
 
 """EBNF production:
@@ -609,6 +717,7 @@ or_test : and_test ('or' and_test)*"""
 def p_or_test(p):
     """or_test : and_test or_tests
                | and_test"""
+    p[0] = p[1]
     pass
 
 def p_or_tests(p):
@@ -623,6 +732,7 @@ and_test : not_test ('and' not_test)*"""
 def p_and_test(p):
     """and_test : not_test and_tests
                 | not_test"""
+    p[0] = p[1]
     pass
 
 def p_and_tests(p):
@@ -636,6 +746,7 @@ not_test : 'not' not_test | comparison"""
 def p_not_test(p):
     """not_test : NOT not_test
                 | comparison"""
+    p[0] = p[1]
     pass
 
 """EBNF production:
@@ -643,6 +754,7 @@ comparison : expr (comp_op expr)*"""
 def p_comparison(p):
     """comparison : expr comps
                   | expr"""
+    p[0] = p[1]
     pass
 
 def p_comps(p):
@@ -680,6 +792,7 @@ expr : xor_expr ('|' xor_expr)*"""
 def p_expr(p):
     """expr : xor_expr xor_exprs
             | xor_expr"""
+    p[0] = p[1]
     pass
 
 def p_xor_exprs(p):
@@ -693,6 +806,7 @@ xor_expr : and_expr ('^' and_expr)*"""
 def p_xor_expr(p):
     """xor_expr : and_expr and_exprs 
                 | and_expr"""
+    p[0] = p[1]
     pass
 
 def p_and_exprs(p):
@@ -707,6 +821,7 @@ and_expr : shift_expr ('&' shift_expr)*"""
 def p_and_expr(p):
     """and_expr : shift_expr shift_exprs
                 | shift_expr"""
+    p[0] = p[1]
     pass
 
 def p_shift_exprs(p):
@@ -720,6 +835,7 @@ shift_expr : arith_expr (('<<'|'>>') arith_expr)*"""
 def p_shift_expr(p):
     """shift_expr : arith_expr arith_exprs
                   | arith_expr"""
+    p[0] = p[1]
     pass
 
 def p_arith_exprs(p):
@@ -735,6 +851,7 @@ arith_expr : term (('+'|'-') term)*"""
 def p_arith_expr(p):
     """arith_expr : term terms
                   | term"""
+    p[0] = p[1]
     pass
 
 def p_terms(p):
@@ -750,6 +867,7 @@ term : factor (('*'|'/'|'%'|'//') factor)*"""
 def p_term(p):
     """term : factor factors
             | factor"""
+    p[0] = p[1]
     pass
 
 def p_factors(p):
@@ -772,6 +890,7 @@ def p_factor(p):
               | MINUS factor
               | NEG factor
               | power"""
+    p[0] = p[1]
     pass
 
 
@@ -782,6 +901,11 @@ def p_power(p):
              | atom powers
              | atom trailers
              | atom"""
+    if len(p) in (4, 3):
+        if isinstance(p[2], Arguments):
+            p[0] = Call(func=p[1],
+                        args=p[2])
+    p[0] = p[1]
     pass
 
 def p_trailers(p):
@@ -810,6 +934,7 @@ def p_atom(p):
             | NONE
             | TRUE
             | FALSE"""
+    p[0] = p[1]
     pass
 
 def p_atom_parent(p):
@@ -857,7 +982,8 @@ def p_trailer(p):
                | LPAR RPAR
                | LBRACKET subscriptlist 
                | PERIOD ID"""
-    pass
+    if len(p) == 4:
+        p[0] = p[2]
 
 
 """EBNF production:
@@ -924,6 +1050,7 @@ def p_testlist(p):
                 | test COMMA
                 | test testlist_1
                 | test"""
+    p[0] = p[1]
     pass
 
 def p_testlist_1(p):
@@ -959,18 +1086,22 @@ def p_classdef(p):
     """classdef : CLASS ID LPAR arglist RPAR COLON suite
                 | CLASS ID LPAR RPAR COLON suite
                 | CLASS ID COLON suite"""
-    pass
+    if len(p) == 8:
+        p[0] = ClassDef(name=p[2],
+                        bases=p[4],
+                        body=p[7])
+    elif len(p) == 7:
+        p[0] = ClassDef(name=[2],
+                        body=p[6])
+    else:
+        p[0] = ClassDef(name=[2],
+                        body=p[4])
 
 
 """EBNF production:
 arglist : (argument ',')* (argument [',']
-                         |'*' test (',' argument)* [',' '**' test]
-                         |'**' test)"""
-
-def p_comma_arguments(p):
-    """comma_arguments : ',' argument
-                       | ',' argument comma_arguments"""
-    pass
+            |'*' test (',' argument)* [',' '**' test]
+            |'**' test)"""
 
 def p_argslist(p):
     """arglist : arguments 
@@ -985,6 +1116,11 @@ def p_argslist(p):
                | TIMES test comma_arguments
                | TIMES test
                | EXP test"""
+    pass
+
+def p_comma_arguments(p):
+    """comma_arguments : ',' argument
+                       | ',' argument comma_arguments"""
     pass
 
 def p_arguments(p):
@@ -1024,14 +1160,21 @@ comp_if : 'if' test_nocond [comp_iter]"""
 def p_comp_if(p):
     """comp_if : IF test_nocond comp_iter
                | IF test_nocond"""
-    pass
+    p[0] = IfExp(test=p[2], )
+
 
 """EBNF production:
 yield_expr : 'yield' [yield_arg]"""
 def p_yield_expr(p):
     """yield_expr : YIELD yield_arg
                   | YIELD"""
-    pass
+    if len(p) == 3:
+        if isinstance(p[2], YieldFrom):
+            p[0] = p[2]
+        else:
+            p[0] = Yield(p[2])
+    else:
+        p[0] = Yield(None)
 
 
 """EBNF production:
@@ -1039,7 +1182,9 @@ yield_arg : 'from' test | testlist"""
 def p_yield_arg(p):
     """yield_arg : FROM test
                  | testlist"""
-    pass
+
+    p[0] = YieldFrom(p[2]) if len(p) == 3 else p[2]
+
 
 
 lexer = Lexer()
@@ -1054,10 +1199,8 @@ if __name__ == '__main__':
             exit(1)
             
         s = open(sys.argv[1]).read()
-        if not s:
-            return
         result = parser.parse(s, lexer=lexer, debug=1)
 
-        print result
+        result.show()
 
     main()
