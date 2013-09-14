@@ -375,7 +375,11 @@ class Lexer(object):
         """ Returns punctuation token or None (if match is not found). """
         # Punctuation (operators and delimiters are both found
         # in the constant 'const.operators'.)
-        for operator in const.OPERATORS.keys():
+        # Sorted in decreasing order of the operator's length
+        # because we want the longest matching string.
+        for operator in sorted(const.OPERATORS.keys(),
+                               cmp=lambda x, y: -1 if len(x) < len(y) else 1,
+                               reverse=True):
             if self.next_input().startswith(operator):
                 self.adjust_pos(operator)
                 return Token(const.OPERATORS[operator], operator, quote=True)
