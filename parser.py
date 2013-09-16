@@ -8,6 +8,7 @@ from py3ast import *
 
 TEST_INPUT = open('test.py.txt').read()
 
+# PLY needs a list of tokens
 tokens = [
     'NEWLINE',
     'INDENT',
@@ -19,6 +20,7 @@ tokens = [
 tokens += map(lambda x: x.upper(), KEYWORDS)
 tokens += OPERATORS.values()
 
+precedence = ()
 
 def _is_stmt(node):
     return len(filter(
@@ -31,8 +33,7 @@ def _is_stmt(node):
 
 
 def p_error(p):
-    print "Syntax error at token", p.type
-    import pdb; pdb.set_trace()
+    raise Exception("Syntax error at token '%s'." % p.type)
 
 """EBNF production:
    file_input : (NEWLINE | stmt)* ENDMARKER"""
@@ -108,122 +109,223 @@ def p_funcdef(p):
                | DEF ID parameters COLON suite"""
 
     if len(p) == 8:
-        p[0] = FunctionDef(p[2], p[3], p[7], None, p[5])
+        p[0] = FunctionDef(name=p[2], args=p[3], body=p[7],
+                           decorator_list=None, returns=Str(p[5]))
     else:
-        p[0] = FunctionDef(p[2], p[3], p[5], None, None)
+        p[0] = FunctionDef(name=p[2], args=p[3], body=p[5],
+                           decrator_list=None, returns=None)
 
-    import pdb; pdb.set_trace()
 
 # For parameters list, the productions used are
 # found at docs.python.org/3.3/reference/compound_stmts.html#function
 # not at the default grammar file.
+# Reproduced below:
+# parameter_list ::=  (defparameter ",")*
+#                     ( "*" [parameter] ("," defparameter)* ["," "**" parameter]
+#                     | "**" parameter
+#                     | defparameter [","] )
+# parameter      ::=  identifier [":" expression]
+# defparameter   ::=  parameter ["=" expression]
+# funcname       ::=  identifier
+
 def p_parameters(p):
-    """parameters : LPAR parameter_list RPAR
-                  | LPAR RPAR"""
-    p[0] = p[2] if len(p) == 4 else []
+    """parameters : LPAR parameter_list RPAR"""
+    p[0] = p[2]
 
 def p_parameter_list(p):
-    """parameter_list : defparameters_1 keyparams
-                      | keyparams"""
+    """parameter_list : empty
+                      | defparameters_opt TIMES parameter comma_defparameters_comma EXP parameter
+                      | defparameters_opt TIMES parameter comma_defparameters
+                      | defparameters_opt EXP parameter
+                      | defparameters_opt defparameter COMMA
+                      | defparameters_opt defparameter"""
+    (args, vararg, varargannotation,
+    kwonlyargs, kwarg, kwargannotation,
+    defaults, kw_defaults) = ([], None, None,
+                              [], None, None,
+                              [], [])
+    p_len = len(p)
+
+    # The second rule
+    if p_len == 7:
+        args = p[1]
+        vararg = p[3].arg
+        varargannotation = p[3].annotation
+        kwonlyargs = p[4]
+        kwarg = p[6].arg
+        kwargannotation = p[6].annotation
+        defaults = [arg._default_val for arg in p[1]]
+        kw_defaults = [kw._default_val for kw in p[4]]
+
+    # The third rule
+    elif p_len == 5:
+        args = p[1]
+        vararg = p[3].arg
+        varargannotation = p[3].annotation
+        kwonlyargs = p[4]
+        defaults = [arg._default_val for arg in p[1]]
+        kw_defaults = [kw._default_val for kw in p[4]]
+
+    # The fourth or fifth rule
+    elif p_len == 4:
+        args = p[1]
+        defaults = [arg._default_val for arg in p[1]]
+
+        # The fourth rule
+        if p[3] != ',':
+            kwarg = p[3].arg
+            kwargannotation = p[3].annotation
+        # The fifth rule
+        else:
+            kwonlyargs = p[2]
+            kw_defaults = [kw._default_val for kw in p[2]]
+
+    # Sixth rule
+    elif p_len == 3:
+        args = p[1]
+        defaults = [arg._default_val for arg in p[1]]
+        kwonlyargs = p[2]
+        kw_defaults = [kw._default_val for kw in p[2]]
+
+    p[0] = Arguments(args, vararg, varargannotation,
+                     kwonlyargs, kwarg, kwargannotation,
+                     defaults, kw_defaults)
+
+def p_comma_defparameters(p):
+    """comma_defparameters : COMMA defparameter
+                           | COMMA defparameter comma_defparameters"""
     if len(p) == 3:
-        p[2].args += p[1]
         p[0] = p[2]
     else:
-        p[0] = p[1]
+        p[0] = p[3] + [p[2]]
 
-
-def p_defparameters_1(p):
-    """defparameters_1 : empty 
-                       | defparameter COMMA defparameters_1"""
-    if len(p) == 4:
-        p[3] = p[3] if isinstance(p[3], list) else []
-        p[0] = p[3] + [p[1]]
-
-
-def p_keyparams(p):
-    """keyparams : TIMES typedparameter defparameters_2 COMMA EXP typedparameter
-                 | TIMES typedparameter COMMA EXP typedparameter
-                 | TIMES typedparameter defparameters_2
-                 | TIMES defparameters_2 COMMA EXP typedparameter
-                 | TIMES defparameters_2
-                 | TIMES typedparameter
-                 | defparameter COMMA
-                 | defparameter"""
-
-    if len(p) == 7:
-        args = p[-1] or []
-        vararg = p[2]
-        varargannotation = None
-        kwonlyargs = p[3]
-        kwarg = p[6]
-
-    elif len(p) == 6 and not isinstance(p[2], list):
-        args = p[-1] or []
-        vararg = p[2]
-        varargannotation = None
-        kwonlyargs = []
-        kwarg = p[5]
-
-    elif len(p) == 4:
-        args = p[-1] or []
-        vararg = p[2]
-        varargannotation = None
-        kwonlyargs = p[3]
-        kwarg = None
-
-    elif len(p) == 6 and isinstance(p[2], list):
-        args = p[-1] or []
-        vararg = p[2][0] if len(p[2]) else None
-        varargannotation = None
-        kwonlyargs = []
-        kwarg = p[5]
-
-    elif len(p) == 3 and p[1] == '*':
-        args = p[-1] or []
-        vararg = p[2][0] if isinstance(p[2], list) else p[2]
-        varargannotation = None
-        kwonlyargs = []
-        kwarg = None
-
-    else:
-        args = p[-1] or []
-        if isinstance(args, list):
-            args.append(p[1])
-        vararg = None
-        varargannotation = None
-        kwonlyargs = []
-        kwarg = None
-
-    p[0] = Arguments(args,
-                     vararg,
-                     varargannotation,
-                     kwonlyargs,
-                     kwarg,
-                     None,
-                     [],
-                     [])
-
-def p_defparameters_2(p):
-    """defparameters_2 : COMMA defparameter
-                       | COMMA defparameter defparameters_2"""
-    if len(p) == 3:
+def p_comma_defparameters_comma(p):
+    """comma_defparameters_comma : COMMA defparameter COMMA
+                                 | COMMA defparameter comma_defparameters_comma"""
+    if p[3] == ',':
         p[0] = [p[2]]
     else:
-        p[0] = [p[2]] + p[3]
+        p[0] = p[3] + [p[2]]
+
+def p_parameter(p):
+    """parameter : ID COLON test
+                 | ID"""
+    if len(p) == 4:
+        p[0] = Arg(arg=p[1], annotation=Str(p[3]))
+    else:
+        p[0] = Arg(arg=p[1])
 
 def p_defparameter(p):
-    """defparameter : typedparameter
-                    | typedparameter ASSIGN test"""
+    """defparameter : parameter ASSIGN test
+                    | parameter"""
+    if len(p) == 4:
+        p[1]._default_val = p[3]
     p[0] = p[1]
 
-def p_typedparameter(p):
-    """typedparameter : ID
-                      | ID COLON test"""
-    Load()
-    p[0] = Name(p[1], ctx=Load())
+def p_defparameters_opt(p):
+    """defparameters_opt : defparameters
+                         | empty"""
+    p[0] = p[1]
 
+def p_defparameters(p):
+    """defparameters : defparameter COMMA
+                     | defparameter COMMA defparameters"""
+    if len(p) == 3:
+        p[0] = [p[1]]
+    else:
+        p[0] = p[3] + [p[1]]
 
-
+# def p_parameter_list(p):
+#     """parameter_list : defparameters_1 keyparams
+#                       | keyparams"""
+#     if len(p) == 3:
+#         p[2].args += p[1]
+#         p[0] = p[2]
+#     else:
+#         p[0] = p[1]
+# 
+# 
+# def p_defparameters_1(p):
+#     """defparameters_1 : empty 
+#                        | defparameter COMMA defparameters_1"""
+#     if len(p) == 4:
+#         p[3] = p[3] if isinstance(p[3], list) else []
+#         p[0] = p[3] + [p[1]]
+# 
+# 
+# def p_keyparams(p):
+#     """keyparams : TIMES defparameters_2 COMMA EXP typedparameter
+#                  | TIMES defparameters_2
+#                  | defparameter COMMA
+#                  | defparameter"""
+# 
+#     # if len(p) == 7:
+#     #     vararg = p[2]
+#     #     varargannotation = None
+#     #     kwonlyargs = p[3]
+#     #     kwarg = p[6]
+# 
+#     # elif len(p) == 6 and not isinstance(p[2], list):
+#     #     vararg = p[2]
+#     #     varargannotation = None
+#     #     kwonlyargs = []
+#     #     kwarg = p[5]
+# 
+#     # elif len(p) == 4:
+#     #     vararg = p[2]
+#     #     varargannotation = None
+#     #     kwonlyargs = p[3]
+#     #     kwarg = None
+# 
+#     # elif len(p) == 6 and isinstance(p[2], list):
+#     #     vararg = p[2][0] if len(p[2]) else None
+#     #     varargannotation = None
+#     #     kwonlyargs = []
+#     #     kwarg = p[5]
+# 
+#     # elif len(p) == 3 and p[1] == '*':
+#     #     vararg = p[2][0] if isinstance(p[2], list) else p[2]
+#     #     varargannotation = None
+#     #     kwonlyargs = []
+#     #     kwarg = None
+# 
+#     # else:
+#     #     if isinstance(args, list):
+#     #         args.append(p[1])
+#     #     vararg = None
+#     #     varargannotation = None
+#     #     kwonlyargs = []
+#     #     kwarg = None
+# 
+#     # p[0] = Arguments([],
+#     #                  vararg,
+#     #                  varargannotation,
+#     #                  kwonlyargs,
+#     #                  kwarg,
+#     #                  None,
+#     #                  [],
+#     #                  [])
+# 
+# def p_defparameters_2(p):
+#     """defparameters_2 : COMMA defparameter
+#                        | defparameter 
+#                        | COMMA defparameter defparameters_2
+#                        | empty"""
+#     if len(p) == 3:
+#         p[0] = [p[2]]
+#     else:
+#         p[0] = [p[2]] + p[3]
+# 
+# def p_defparameter(p):
+#     """defparameter : typedparameter
+#                     | typedparameter ASSIGN test"""
+#     p[0] = Arg(p[1], None) if len(p) == 2 else Arg(p[1], p[2])
+# 
+# def p_typedparameter(p):
+#     """typedparameter : ID
+#                       | ID COLON test
+#                       | empty"""
+#     p[0] = p[1]
 
 
 def p_varargslist(p):
@@ -271,7 +373,7 @@ stmt : simple_stmt | compound_stmt"""
 def p_stmt(p):
     """stmt : simple_stmt
             | compound_stmt"""
-    p[0] = Node('Stmt', p[1])
+    p[0] = p[1]
     pass
 
 """EBNF production:
@@ -1199,8 +1301,13 @@ if __name__ == '__main__':
             exit(1)
             
         s = open(sys.argv[1]).read()
-        result = parser.parse(s, lexer=lexer, debug=1)
+        try:
+            result = parser.parse(s, lexer=lexer, debug=1)
+        except Exception as e:
+            print(e.message)
+            exit(1)
 
-        result.show()
+
+        print(dump(result))
 
     main()
