@@ -6,7 +6,6 @@ class Token(object):
     """ Simple abstraction for a single token. """
     def __init__(self, type, text=None, quote=False, decode=False):
         self.type = type
-        #self.text = text
         self.value = text
         self.quote = quote
         self.decode = decode
@@ -402,6 +401,5 @@ if __name__ == '__main__':
                 token.print_()
             else:
                 break
-
 
     main()
