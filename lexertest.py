@@ -1,14 +1,16 @@
-""" Unit tests."""
-from lexer import Lexer
+#!/usr/bin/env python
+
+"""Unit tests for lexer.py"""
 import unittest
+from lexer import Lexer
 
 TEST_INPUT = open('test.py.txt').read()
 
 class LexerTest(unittest.TestCase):
-    """ Basic tokenization teser. """
+    """Basic tokenization teser"""
 
     def test_tokens(self):
-        """ Tokens tester. """
+        """Tokens tester"""
         lexer = Lexer()
         lexer.input(TEST_INPUT)
 

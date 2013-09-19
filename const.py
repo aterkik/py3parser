@@ -36,7 +36,7 @@ OPERATORS = {'//=': 'AUGINTDIV', # Augmented integer division
              '+': 'PLUS',
              '-': 'MINUS',
              '*': 'TIMES',
-             '**': 'EXP',
+            '**': 'EXP',
              '/': 'DIV',
              '%': 'MOD',
              '&': 'BITAND',

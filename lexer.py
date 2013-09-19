@@ -1,43 +1,17 @@
-""" Handwritten lexer for Python 3 """
+#!/usr/bin/env python
+
+"""Handwritten lexer for Python 3"""
 import const
 import re
 
-class Token(object):
-    """ Simple abstraction for a single token. """
-    def __init__(self, type, text=None, quote=False, decode=False):
-        self.type = type
-        self.value = text
-        self.quote = quote
-        self.decode = decode
-
-    def __unicode__(self):
-        value = self.value.decode('string_escape')\
-               if self.decode else self.value
-
-        if value and self.quote:
-            return '(%s "%s")' % (self.type, value)
-        elif value:
-            return '(%s %s)' % (self.type, value)
-        return '(%s)' % self.type
-
-    def __str__(self):
-        return self.__unicode__()
-
-    def print_(self):
-        """ Escaping-aware print. """
-        if self.decode:
-            print self.__unicode__().encode('string_escape')
-        else:
-            print self.__unicode__()
-
 class Lexer(object):
-    """ A two-pass lexer. First pass transforms logical lines to physical ones
-    and strips out comments. Second pass tokenizes. """
+    """A two-pass lexer. First pass transforms logical lines to physical ones
+    and strips out comments. Second pass tokenizes"""
     def __init__(self):
         self.content = ''
         self.buf = ''
         self.pos = 0
-        # Holds regexp for spaces or tabs, no mixing them in Python 3.
+        # Holds regexp for spaces or tabs, no mixing them in Python 3
         self.indentby = None
 
         # Identation marker list (used as a stack)
@@ -58,7 +32,7 @@ class Lexer(object):
         self.tokens = self.next_token()
 
     def join_lines(self):
-        """ Converts physical lines to logical lines. """
+        """Converts physical lines to logical lines"""
         implicit_joiners = []
 
         while self.lahead() != const.EOF:
@@ -77,7 +51,7 @@ class Lexer(object):
                 self.adjust_pos(self.lahead())
 
             elif self.lahead() in ['}', ']', ')']:
-                if len(implicit_joiners) > 0 and \
+                if len(implicit_joiners) > 0 and\
                 implicit_joiners[-1] == self.lahead():
                    implicit_joiners.pop()
                 self.buf += self.lahead()
@@ -108,29 +82,29 @@ class Lexer(object):
                 self.adjust_pos(self.lahead())
 
     def lahead(self):
-        """ Lookahead. """
-        return self.content[self.pos] \
+        """Look ahead"""
+        return self.content[self.pos]\
                if self.pos < len(self.content) else const.EOF
 
     def consume_comment(self):
-        """ Ignores comments. """
+        """Ignores comments"""
         while self.content[self.pos] != '\n':
             self.pos += 1
         # Ignore the line-feed character too
         self.pos += 1
 
     def peek(self, step=1):
-        """ Peek ahead 'step' characters. """
+        """Peek ahead 'step' characters"""
         assert(step > 0)
-        return self.content[self.pos + step] \
+        return self.content[self.pos + step]\
                if self.pos+step < len(self.content) else None
 
     def adjust_pos(self, text):
-        """ Move the position len(text) forward. """
+        """Move the position len(text) forward"""
         self.pos += len(text)
 
     def next_input(self):
-        """ Remaining string input. """
+        """Remaining string input"""
         return self.content[self.pos:]
 
     def token(self):
@@ -141,7 +115,7 @@ class Lexer(object):
         return None
 
     def next_token(self):
-        """ Yields the next valid token. """
+        """Yields the next valid token"""
         # Logical-line start flag (used for indentation recognition)
         linestart = True
 
@@ -216,7 +190,7 @@ class Lexer(object):
                 linestart = False
                 continue
 
-            raise Exception("Unrecognized token '%s'." % self.lahead())
+            raise Exception("Unrecognized token '{0}'".format(self.lahead()))
 
         # Out of the main loop!
         if self.lahead() == const.EOF:
@@ -231,8 +205,8 @@ class Lexer(object):
             raise StopIteration
 
     def indentation(self):
-        """ Returns a single 'indent' token in a list
-            or a list of multiple 'dedent' tokens. """
+        """Returns a single 'indent' token in a list
+            or a list of multiple 'dedent' tokens"""
 
         return_tokens = []
         matched = re.match(self.indentby, self.next_input())
@@ -262,8 +236,8 @@ class Lexer(object):
         return return_tokens
 
     def string_literal(self):
-        """ String literals (Pattern test for long strings must come
-        before the test for small strings). """
+        """String literals (Pattern test for long strings must come
+        before the test for small strings)"""
 
         # Single-quoted long string (i.e. '''spam''')
         long_singleq_match = const.LONG_SINGLEQ.match(self.next_input())
@@ -329,8 +303,8 @@ class Lexer(object):
         return None
 
     def imaginary_literal(self):
-        """ Matches and returns a token for
-        imaginary number literals or None. """
+        """Matches and returns a token for
+        imaginary number literals or None"""
         match = const.IMAGINARY.match(self.next_input())
         if match:
             text = match.group()
@@ -339,7 +313,7 @@ class Lexer(object):
         return None
 
     def float_literal(self):
-        """Token for floating point or None if match is not found. """
+        """Token for floating point or None if match is not found"""
         match = const.FLOAT_.match(self.next_input())
         if match:
             text = match.group()
@@ -348,7 +322,7 @@ class Lexer(object):
         return None
 
     def int_literal(self):
-        """ Integer (octal, hex, binary, decimal) or None. """
+        """Integer (in octal, hex, binary, decimal) or None"""
         match = const.INTEGER.match(self.next_input())
         if match:
             text = match.group()
@@ -357,7 +331,7 @@ class Lexer(object):
         return None
 
     def ident_or_keyword(self):
-        """ Identifiers or keywords or None. """
+        """Identifiers or keywords or None"""
         match = const.KEYWORD_IDENT.match(self.next_input())
         if match:
             text = match.group()
@@ -371,7 +345,7 @@ class Lexer(object):
         return None
 
     def punctuation(self):
-        """ Returns punctuation token or None (if match is not found). """
+        """Returns punctuation token or None (if match is not found)"""
         # Punctuation (operators and delimiters are both found
         # in the constant 'const.operators'.)
         # Sorted in decreasing order of the operator's length
@@ -383,6 +357,34 @@ class Lexer(object):
                 self.adjust_pos(operator)
                 return Token(const.OPERATORS[operator], operator, quote=True)
         return None
+
+class Token(object):
+    """Simple abstraction for a single token"""
+    def __init__(self, type, text=None, quote=False, decode=False):
+        self.type = type
+        self.value = text
+        self.quote = quote
+        self.decode = decode
+
+    def __unicode__(self):
+        value = self.value.decode('string_escape')\
+               if self.decode else self.value
+
+        if value and self.quote:
+            return '({0} "{1}")'.format(self.type, value)
+        elif value:
+            return '({0} {1})'.format(self.type, value)
+        return '({0})'.format(self.type)
+
+    def __str__(self):
+        return self.__unicode__()
+
+    def print_(self):
+        """Escaping-aware print"""
+        if self.decode:
+            print self.__unicode__().encode('string_escape')
+        else:
+            print self.__unicode__()
 
 if __name__ == '__main__':
     import sys
