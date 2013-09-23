@@ -116,6 +116,16 @@ class Lexer(object):
 
     def next_token(self):
         """Yields the next valid token"""
+
+        def _first_true(seq):
+            """Given a sequence of callables, returns the first on whose return value
+            evaluates to True. None if all evaluate to False."""
+            for item in seq:
+                ret = item()
+                if ret:
+                    return ret
+            return None
+
         # Logical-line start flag (used for indentation recognition)
         linestart = True
 
@@ -154,39 +164,13 @@ class Lexer(object):
                 linestart = True
                 continue
 
-            token_string = self.string_literal()
-            if token_string:
-                yield token_string
-                linestart = False
-                continue
-
-            token_imaginary = self.imaginary_literal()
-            if token_imaginary:
-                yield token_imaginary
-                linestart = False
-                continue
-
-            token_float = self.float_literal()
-            if token_float:
-                yield token_float
-                linestart = False
-                continue
-
-            token_int = self.int_literal()
-            if token_int:
-                yield token_int
-                linestart = False
-                continue
-
-            token_ident_or_key = self.ident_or_keyword()
-            if token_ident_or_key:
-                yield token_ident_or_key
-                linestart = False
-                continue
-
-            token_punct = self.punctuation()
-            if token_punct:
-                yield token_punct
+            candid_ts = [self.string_literal, self.imaginary_literal,
+             self.float_literal, self.int_literal,
+             self.ident_or_keyword, self.punctuation]
+            
+            token = _first_true(candid_ts)
+            if token:
+                yield token
                 linestart = False
                 continue
 
